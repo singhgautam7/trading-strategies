@@ -83,7 +83,7 @@ class BreezeAPI:
             log.info(f"Fetching option data for {stock_code}")
             log.debug(f"Parameters: strike_price={strike_price}, option_type={option_type}, from_date={from_date}, to_date={to_date}, interval={interval}, expiry_date={expiry_date}")
 
-            data = self.breeze.get_historical_data(
+            data = self.breeze.get_historical_data_v2(
                 interval=interval,
                 from_date=from_date,
                 to_date=to_date,

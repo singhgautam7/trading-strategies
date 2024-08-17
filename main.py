@@ -2,6 +2,7 @@
 from rich.logging import RichHandler
 from rich.console import Console
 from strategies.stochastic.historic_data import fetch_banknifty_futures_history
+from strategies.stochastic.test import run_test
 
 # Set up logging
 logging.basicConfig(
@@ -24,4 +25,5 @@ def main():
         console.print("[bold red]Failed to fetch data. Please check the logs for more information.[/bold red]")
 
 if __name__ == "__main__":
-    main()
+    # main()
+    run_test()
