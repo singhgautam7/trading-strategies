@@ -16,7 +16,7 @@ console = Console()
 # Global variable to store crossover data
 crossover_df = pd.DataFrame(columns=[
     'Timestamp', 'Futures Price', 'VWAP', 'Option Type', 'Strike Price',
-    'Option Open', 'Option High', 'Option Low', 'Option Close', '%K', '%D'
+    'Expiry', 'Option OHLC', '%K', '%D', 'Open', 'Close'
 ])
 
 def print_valid_trades():
@@ -26,11 +26,20 @@ def print_valid_trades():
 
     table = Table(title="Valid Trades")
 
-    for column in crossover_df.columns:
+    columns_to_display = [
+        'Timestamp', 'Futures Price', 'VWAP', 'Option Type', 'Strike Price',
+        'Expiry', 'Option OHLC', '%K', '%D'
+    ]
+
+    for column in columns_to_display:
         table.add_column(column, style="cyan")
 
     for _, row in crossover_df.iterrows():
-        table.add_row(*[str(val) for val in row])
+        row_color = "red" if row['Close'] > row['Open'] else "green"
+        table.add_row(
+            *[str(row[col]) for col in columns_to_display],
+            style=row_color
+        )
 
     console.print(table)
 
@@ -84,6 +93,9 @@ def run_strategy():
     breeze = BreezeAPI()
     breeze.connect()
 
+    # Store the options history fetched here
+    historic_options_data = {}
+
     # Fetch Bank Nifty futures data
     futures_df = fetch_banknifty_futures_history()
     if futures_df is None:
@@ -98,14 +110,24 @@ def run_strategy():
     # List to collect new rows
     new_rows = []
 
+    flag_stochastic_fulfilled = False
+
     for i in range(len(futures_df)):
         if above_vwap.iloc[i] or below_vwap.iloc[i]:
             current_price = futures_df['close'].iloc[i]
             option_type = 'Call' if above_vwap.iloc[i] else 'Put'
             strike_price = get_nearest_option(current_price, option_type)
+            current_datetime_str = futures_df['datetime'].iloc[i]
+            option_history_key = f"{str(strike_price)}-{option_type}"
+            log.info(f"Checking at {current_datetime_str=} and {current_price=}")
 
             # Fetch option data
-            option_df = fetch_banknifty_options_history(strike_price, option_type)
+            if option_history_key in historic_options_data:
+                option_df = historic_options_data[option_history_key]
+            else:
+                option_df = fetch_banknifty_options_history(strike_price, option_type)
+                historic_options_data[option_history_key] = option_df
+
             if option_df is None:
                 continue
 
@@ -113,38 +135,37 @@ def run_strategy():
             option_df = calculate_vwap(option_df)
             option_df = calculate_stochastic(option_df)
 
+            # Filter options data based on current timestamp
+            option_df = option_df[option_df.datetime == current_datetime_str]
+
+            if option_df.empty:
+                continue
+
             # Check for trade conditions
-            if (option_df['close'].iloc[-1] > option_df['VWAP'].iloc[-1] and
+            if \
+                (option_df['close'].iloc[-1] > option_df['VWAP'].iloc[-1] and
                 option_df['%K'].iloc[-1] > option_df['%D'].iloc[-1] and
                 option_df['%K'].iloc[-1] < 70):
 
                 # Append to new_rows list
                 new_rows.append({
-                    'Timestamp': option_df.index[-1],
+                    'Timestamp': option_df['datetime'].iloc[-1],
                     'Futures Price': current_price,
-                    'VWAP': option_df['VWAP'].iloc[-1],
+                    'VWAP': round(option_df['VWAP'].iloc[-1], 2),
                     'Option Type': option_type,
                     'Strike Price': strike_price,
-                    'Option Open': option_df['open'].iloc[-1],
-                    'Option High': option_df['high'].iloc[-1],
-                    'Option Low': option_df['low'].iloc[-1],
-                    'Option Close': option_df['close'].iloc[-1],
-                    '%K': option_df['%K'].iloc[-1],
-                    '%D': option_df['%D'].iloc[-1]
+                    'Expiry': option_df['expiry_date'].iloc[-1],
+                    'Option OHLC': f"O:{option_df['open'].iloc[-1]} H:{option_df['high'].iloc[-1]} L:{option_df['low'].iloc[-1]} C:{option_df['close'].iloc[-1]}",
+                    '%K': round(option_df['%K'].iloc[-1], 2),
+                    '%D': round(option_df['%D'].iloc[-1], 2),
                 })
 
-                # subject = f"Trade Alert: Bank Nifty {option_type} Option"
-                # body = f"""
-                # Trade possibility detected:
-                # Date: {option_df.index[-1]}
-                # Option Type: {option_type}
-                # Strike Price: {strike_price}
-                # Current Price: {option_df['close'].iloc[-1]}
-                # VWAP: {option_df['VWAP'].iloc[-1]}
-                # %K: {option_df['%K'].iloc[-1]}
-                # %D: {option_df['%D'].iloc[-1]}
-                # """
-                # send_email_alert(subject, body)
+                flag_stochastic_fulfilled = True
+
+            # If %K goes below the %D, then we wait for the new trade
+            elif flag_stochastic_fulfilled and \
+                option_df['%K'].iloc[-1] < option_df['%D'].iloc[-1]:
+                flag_stochastic_fulfilled = False
 
     # Add new rows to crossover_df only if there are any
     if new_rows:

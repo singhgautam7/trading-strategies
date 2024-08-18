@@ -15,7 +15,7 @@ def fetch_banknifty_futures_history():
 
     # Set the dates
     to_date = datetime.today()
-    from_date = (to_date - timedelta(days=5))
+    from_date = (to_date - timedelta(days=3))
     expiry_date = datetime.strptime("2024-08-28", "%Y-%m-%d")
 
     data = breeze.get_futures_data(
