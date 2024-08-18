@@ -80,7 +80,7 @@ class BreezeAPI:
             to_date = self._format_date(to_date)
             expiry_date = self._format_date(expiry_date) if expiry_date else None
 
-            log.info(f"Fetching option data for {stock_code}")
+            log.info(f"Fetching option data for {stock_code} {option_type} at {strike_price}")
             log.debug(f"Parameters: strike_price={strike_price}, option_type={option_type}, from_date={from_date}, to_date={to_date}, interval={interval}, expiry_date={expiry_date}")
 
             data = self.breeze.get_historical_data_v2(
